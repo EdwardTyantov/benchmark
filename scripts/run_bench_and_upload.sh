@@ -68,5 +68,29 @@ then
     echo "Running benchmark comparison step"
     python scripts/compare_benchmark.py \
         --old pytorch_benchmark_data/benchmark/master/latest \
-        --new ${BENCHMARK_ABS_FILENAME}
+        --new ${BENCHMARK_ABS_FILENAME} \
+        2>&1 | tee compare.log
+fi
+
+# Post a comment to the PR
+if [ "$CIRCLE_BRANCH" != "master" ]
+then
+    sudo apt-get install jq
+    GH_USER='pytorchbot'
+    GH_API=$GITHUB_PYTORCHBOT_TOKEN
+    pr_response=$(curl --location --request GET "https://api.github.com/repos/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/pulls?head=$CIRCLE_PROJECT_USERNAME:$CIRCLE_BRANCH&state=open" \
+    -u $GH_USER:$GH_API)
+
+    if [ $(echo $pr_response | jq length) -eq 0 ]; then
+    echo "No PR found to update"
+    else
+    pr_comment_url=$(echo $pr_response | jq -r ".[]._links.comments.href")
+    fi
+
+    curl --location --request POST "$pr_comment_url" \
+    -u $GH_USER:$GH_API \
+    --header 'Content-Type: application/json' \
+    --data-raw "{
+    \"body\": \"`cat compare.log`\"
+    }"
 fi
